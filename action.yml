@@ -1,0 +1,50 @@
+name: 'Cipher Solana Wallet Audit'
+description: 'Scans repo for plaintext Solana private keys, seed phrases, and other wallet-security anti-patterns. Fails CI on high-severity findings.'
+author: 'cryptomotifs'
+branding:
+  icon: 'shield'
+  color: 'purple'
+inputs:
+  fail-on:
+    description: 'Minimum severity to fail CI (low/medium/high/critical)'
+    required: false
+    default: 'high'
+  include:
+    description: 'Glob patterns to scan (comma-separated)'
+    required: false
+    default: '**/*'
+  exclude:
+    description: 'Glob patterns to skip (comma-separated)'
+    required: false
+    default: 'node_modules/**,.git/**,dist/**,build/**,vendor/**'
+  path:
+    description: 'Directory to scan (defaults to $GITHUB_WORKSPACE)'
+    required: false
+    default: ''
+outputs:
+  findings-count:
+    description: 'Total findings across all severities'
+    value: ${{ steps.audit.outputs.findings-count }}
+  critical-count:
+    description: 'Number of critical-severity findings'
+    value: ${{ steps.audit.outputs.critical-count }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Run Cipher Solana Wallet Audit
+      id: audit
+      shell: bash
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+        INCLUDE: ${{ inputs.include }}
+        EXCLUDE: ${{ inputs.exclude }}
+        SCAN_PATH: ${{ inputs.path }}
+      run: |
+        set -eo pipefail
+        target="${SCAN_PATH:-$GITHUB_WORKSPACE}"
+        echo "Scanning $target (fail-on=$FAIL_ON)"
+        python "${{ github.action_path }}/src/audit.py" "$target"

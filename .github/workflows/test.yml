@@ -1,0 +1,66 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+      - name: Run test suite
+        run: pytest tests/ -v
+
+  self-audit:
+    name: self-audit (action runs on its own fixtures)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Confirm the audit PASSES on a clean fixture.
+      - name: Audit clean fixture (should pass)
+        uses: ./
+        with:
+          path: tests/fixtures/clean-repo
+          fail-on: high
+
+      # 2. Confirm the audit FAILS on the plaintext-key fixture.
+      - name: Audit plaintext-key fixture (should fail)
+        id: bad-audit
+        continue-on-error: true
+        uses: ./
+        with:
+          path: tests/fixtures/plaintext-key
+          fail-on: critical
+
+      - name: Assert bad-audit failed
+        run: |
+          if [ "${{ steps.bad-audit.outcome }}" != "failure" ]; then
+            echo "::error::Expected plaintext-key fixture to trigger a critical finding, but action outcome was '${{ steps.bad-audit.outcome }}'"
+            exit 1
+          fi
+          echo "Self-audit verified: scanner correctly failed on the plaintext-key fixture."
+
+      # 3. Audit our own src/ — should produce zero findings of any severity.
+      - name: Audit own src/ (production code)
+        uses: ./
+        with:
+          path: src
+          fail-on: low

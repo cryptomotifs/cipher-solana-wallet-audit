@@ -1,0 +1,49 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release + update sliding v1 tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Re-point the sliding `v1` tag at this release's commit so
+      # `uses: cryptomotifs/cipher-solana-wallet-audit@v1` always
+      # resolves to the latest v1.x.x.
+      - name: Update sliding major-version tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eo pipefail
+          full_tag="${GITHUB_REF_NAME}"   # e.g. v1.2.3
+          major="${full_tag%%.*}"          # e.g. v1
+          echo "Re-pointing $major -> $full_tag"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$major"
+          git push origin "$major" --force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          name: ${{ github.ref_name }}
+          body: |
+            Cipher Solana Wallet Audit ${{ github.ref_name }}.
+
+            Full usage + configuration: see the [README](./README.md).
+
+            Drop-in:
+            ```yaml
+            - uses: cryptomotifs/cipher-solana-wallet-audit@v1
+            ```

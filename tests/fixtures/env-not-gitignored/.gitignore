@@ -1,0 +1,3 @@
+node_modules/
+dist/
+# NOTE: no .env entry — that's the whole point of this fixture
