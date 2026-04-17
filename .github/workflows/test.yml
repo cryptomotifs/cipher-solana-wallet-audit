@@ -51,15 +51,14 @@ jobs:
       - name: Assert bad-audit failed
         run: |
           if [ "${{ steps.bad-audit.outcome }}" != "failure" ]; then
-            echo "::error::Expected plaintext-key fixture to trigger a critical finding, but action outcome was ${{ steps.bad-audit.outcome }}"
+            echo "::error::Expected plaintext-key fixture to trigger a critical finding"
             exit 1
           fi
-          echo "Self-audit verified: scanner correctly failed on the plaintext-key fixture."
 
       - name: Audit own src/ (production code)
         uses: ./
         with:
           path: src
           fail-on: low
-          exclude: "src/patterns.py,**/patterns.py"
+          exclude: "patterns.py,src/patterns.py,**/patterns.py"
 
