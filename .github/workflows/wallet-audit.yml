@@ -12,9 +12,9 @@ jobs:
     name: Scan for plaintext Solana keys, seed phrases, .env leaks
     steps:
       - uses: actions/checkout@v4
-      - name: Run cipher-solana-wallet-audit (self-audit — excludes test fixtures)
+      - name: Run cipher-solana-wallet-audit (self-audit — excludes test fixtures + rule definitions)
         uses: cryptomotifs/cipher-solana-wallet-audit@v1
         with:
           fail-on: high
-          exclude: "node_modules/**,.git/**,dist/**,build/**,vendor/**,tests/fixtures/**,fixtures/**"
+          exclude: "node_modules/**,.git/**,dist/**,build/**,vendor/**,tests/fixtures/**,fixtures/**,src/patterns.py,**/patterns.py"
 
