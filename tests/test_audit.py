@@ -61,6 +61,44 @@ class TestHardcodedRpcFixture:
         assert "HARDCODED_RPC" in _rule_ids(report)
 
 
+class TestDriftNoncePatternFixture:
+    def test_detects_nonce_advance_with_admin(self) -> None:
+        report = scan_repo(FIXTURES / "drift-nonce-pattern")
+        assert "NONCE_ADVANCE_IN_MULTISIG" in _rule_ids(report), (
+            f"expected NONCE_ADVANCE_IN_MULTISIG, got: "
+            f"{[f.rule_id for f in report.findings]}"
+        )
+
+
+class TestDriftOracleWhitelistFixture:
+    def test_detects_oracle_push_without_liquidity_check(self) -> None:
+        report = scan_repo(FIXTURES / "drift-oracle-whitelist")
+        assert "LOW_LIQUIDITY_ORACLE_WHITELIST" in _rule_ids(report), (
+            f"expected LOW_LIQUIDITY_ORACLE_WHITELIST, got: "
+            f"{[f.rule_id for f in report.findings]}"
+        )
+
+
+class TestDriftAdminBundleFixture:
+    def test_detects_multi_admin_tx_bundle(self) -> None:
+        report = scan_repo(FIXTURES / "drift-admin-bundle")
+        assert "UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE" in _rule_ids(report), (
+            f"expected UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE, got: "
+            f"{[f.rule_id for f in report.findings]}"
+        )
+
+
+class TestCleanRepoSurvivesDriftRules:
+    """Regression: the three new rules must not flag the clean fixture."""
+
+    def test_clean_repo_still_zero(self) -> None:
+        report = scan_repo(FIXTURES / "clean-repo")
+        ids = _rule_ids(report)
+        assert "NONCE_ADVANCE_IN_MULTISIG" not in ids
+        assert "LOW_LIQUIDITY_ORACLE_WHITELIST" not in ids
+        assert "UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE" not in ids
+
+
 class TestReportFormatting:
     def test_annotation_format(self) -> None:
         report = scan_repo(FIXTURES / "plaintext-key")

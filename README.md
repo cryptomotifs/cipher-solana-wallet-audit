@@ -72,12 +72,21 @@ Use them in later steps:
 
 | Rule ID                   | Severity | What it catches                                                    |
 |---------------------------|----------|--------------------------------------------------------------------|
-| `PLAINTEXT_KEY`           | critical | Base58 strings 86–90 chars long (likely Solana secret keys)        |
-| `JSON_KEYPAIR`            | critical | `[123, 45, ..., 99]` 64-integer arrays (Solana CLI keypair JSON)   |
-| `SEED_IN_COMMENT`         | critical | 12- or 24-word BIP39-style list in a comment                       |
-| `SOLANA_CONFIG_KEYPAIR`   | critical | Tracked files named `id.json` or `*-keypair.json`                  |
-| `ENV_LEAK`                | high     | `.env` file present in the tree but not covered by any `.gitignore`|
-| `HARDCODED_RPC`           | medium   | Mainnet RPC URL with an embedded `api-key=` / `token=` query param |
+| `PLAINTEXT_KEY`                     | critical | Base58 strings 86–90 chars long (likely Solana secret keys)        |
+| `JSON_KEYPAIR`                      | critical | `[123, 45, ..., 99]` 64-integer arrays (Solana CLI keypair JSON)   |
+| `SEED_IN_COMMENT`                   | critical | 12- or 24-word BIP39-style list in a comment                       |
+| `SOLANA_CONFIG_KEYPAIR`             | critical | Tracked files named `id.json` or `*-keypair.json`                  |
+| `NONCE_ADVANCE_IN_MULTISIG`         | critical | `AdvanceNonce` near `SetAuthority` / `UpgradeProgram` (≤50 lines) — Drift-hack pattern |
+| `ENV_LEAK`                          | high     | `.env` file present in the tree but not covered by any `.gitignore`|
+| `LOW_LIQUIDITY_ORACLE_WHITELIST`    | high     | Oracle allow-list add with no preceding liquidity / depth check    |
+| `UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE`| high     | One tx bundles 2+ admin instructions (SetAuthority / UpgradeProgram) |
+| `HARDCODED_RPC`                     | medium   | Mainnet RPC URL with an embedded `api-key=` / `token=` query param |
+
+The three `NONCE_ADVANCE_IN_MULTISIG` / `LOW_LIQUIDITY_ORACLE_WHITELIST` /
+`UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE` rules were added in **v1.1.0** after
+the April 2026 Drift hack ($285M, DPRK-linked). See [the post-mortem
+article](https://dev.to/cryptomotifs) for the full attack chain and how
+each rule maps back to it.
 
 All matches are surfaced as **inline GitHub annotations** so they appear
 right on the PR diff — no need to dig through logs.

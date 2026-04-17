@@ -1,5 +1,5 @@
 name: 'Cipher Solana Wallet Audit'
-description: 'Scans repo for plaintext Solana private keys, seed phrases, and other wallet-security anti-patterns. Fails CI on high-severity findings.'
+description: 'Scans repo for plaintext Solana private keys, seed phrases, durable-nonce multisig anti-patterns, and other wallet-security issues. v1.1.0 adds three rules derived from the April 2026 Drift hack.'
 author: 'cryptomotifs'
 branding:
   icon: 'shield'

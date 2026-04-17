@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from src.patterns import (
+    ALL_RULES,
     HARDCODED_RPC,
     JSON_KEYPAIR,
+    LOW_LIQUIDITY_ORACLE_WHITELIST,
+    NONCE_ADVANCE_IN_MULTISIG,
     PLAINTEXT_KEY,
     SEED_IN_COMMENT,
     SOLANA_CONFIG_KEYPAIR,
+    UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE,
     bip39_word_ratio,
 )
 
@@ -117,3 +121,25 @@ class TestSolanaConfigKeypair:
 
     def test_skips_unrelated_json(self) -> None:
         assert SOLANA_CONFIG_KEYPAIR.regex.search("package.json") is None
+
+
+class TestDriftRulesRegistered:
+    """All three drift-hack-derived rules are exported through ALL_RULES."""
+
+    def test_nonce_rule_registered(self) -> None:
+        assert NONCE_ADVANCE_IN_MULTISIG in ALL_RULES
+        assert NONCE_ADVANCE_IN_MULTISIG.scope == "tree"
+        assert NONCE_ADVANCE_IN_MULTISIG.severity == "critical"
+        assert NONCE_ADVANCE_IN_MULTISIG.tree_scan is not None
+
+    def test_oracle_rule_registered(self) -> None:
+        assert LOW_LIQUIDITY_ORACLE_WHITELIST in ALL_RULES
+        assert LOW_LIQUIDITY_ORACLE_WHITELIST.scope == "tree"
+        assert LOW_LIQUIDITY_ORACLE_WHITELIST.severity == "high"
+        assert LOW_LIQUIDITY_ORACLE_WHITELIST.tree_scan is not None
+
+    def test_admin_bundle_rule_registered(self) -> None:
+        assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE in ALL_RULES
+        assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE.scope == "tree"
+        assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE.severity == "high"
+        assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE.tree_scan is not None
