@@ -7,6 +7,9 @@ venv/
 .env
 .env.*
 !.env.example
+# Test fixtures intentionally contain .env files for scanner tests.
+!tests/fixtures/**/.env
+!tests/fixtures/**/.env.*
 node_modules/
 dist/
 build/
