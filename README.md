@@ -117,6 +117,14 @@ pytest tests/ -v
 The scanner itself has **zero runtime dependencies** beyond the Python 3.11
 standard library.
 
+## Related
+
+[![MCPize — cipher-x402-mcp](https://img.shields.io/badge/MCPize-cipher--x402--mcp%20%240%20%2F%20%249%20%2F%20%2429%20%2F%20%2499-00d084)](https://mcpize.com/mcp/cipher-x402-mcp)
+
+- **[cipher-starter](https://github.com/cryptomotifs/cipher-starter)** — free MIT Solana solo-dev playbook (150+ pages of research + playbooks).
+- **[cipher-solana-bot-toolkit](https://github.com/cryptomotifs/cipher-solana-bot-toolkit)** — free MIT toolkit: flash-loan router, volume bot, arb/MEV predator, memecoin launcher, copy trader.
+- **[cipher-x402-mcp](https://github.com/cryptomotifs/cipher-x402-mcp)** — free MIT MCP server exposing 8 Solana + macro tools via x402 USDC payments. Managed hosted plans ($0/$9/$29/$99) on **[MCPize](https://mcpize.com/mcp/cipher-x402-mcp)**.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
