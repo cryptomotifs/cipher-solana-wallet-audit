@@ -535,6 +535,105 @@ UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE = Rule(
 )
 
 
+# ---------------------------------------------------------------------------
+# v1.2.0 additions (2026-04-25): commit-time leaks the comment / JSON / path
+# rules above don't catch.  Both target real compromise vectors observed in
+# the wild on Solana repos.
+# ---------------------------------------------------------------------------
+
+# Rule 10: MNEMONIC_IN_STRING — BIP39 seed phrase as a string literal (not in
+# a comment).  Catches patterns like:
+#     const mnemonic = "abandon abandon abandon ... about";
+#     SEED_PHRASE='canyon vacant ... yellow'
+#     mnemonic: str = """sister fox ... cluster zone"""
+# The SEED_IN_COMMENT rule covers `// ... //` / `# ...` lines; this rule
+# covers the LITERAL form which is the more common production-leak pattern.
+# We require the string to look BIP39-shaped (12 / 24 lowercase words of
+# 3-8 letters each) AND that the surrounding identifier hints at wallet
+# usage (mnemonic / seed / phrase / wallet) to keep false positives tame.
+MNEMONIC_IN_STRING_REGEX = re.compile(
+    r"""(?ix)
+    (?:mnemonic|seed[_\-]?phrase|seed|wallet[_\-]?phrase)   # context word
+    \s*[:=]\s*                                              # = or :
+    (?P<q>['"`])                                            # opening quote
+    (?P<body>(?:[a-z]{3,8}\s+){11,23}[a-z]{3,8})            # 12 or 24 words
+    (?P=q)                                                  # matching close
+    """
+)
+
+MNEMONIC_IN_STRING = Rule(
+    id="MNEMONIC_IN_STRING",
+    severity="critical",
+    description=(
+        "BIP39-shaped seed phrase appears as a string literal assigned to "
+        "a wallet/seed/mnemonic identifier. Seed phrases give full wallet "
+        "control; never store as a literal in tracked code. Move to a "
+        "secrets manager (1Password CLI, doppler, vault) and rotate the "
+        "wallet."
+    ),
+    regex=MNEMONIC_IN_STRING_REGEX,
+    scope="content",
+)
+
+
+# Rule 11: ANCHOR_WALLET_LEAK — Anchor.toml `[provider].wallet` pointing at
+# a path that resolves to a file present in the repo.  This is the canonical
+# Anchor framework setup leak: the local dev keypair gets committed because
+# the path in Anchor.toml is repo-relative.
+def _scan_anchor_wallet_leak(repo_root: Path) -> Iterable[tuple[Path, int, str]]:
+    for toml in repo_root.rglob("Anchor.toml"):
+        if not toml.is_file():
+            continue
+        try:
+            text = toml.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        # Find the [provider] table and a `wallet = "..."` line.
+        in_provider = False
+        for ln, raw in enumerate(text.splitlines(), 1):
+            line = raw.strip()
+            if line.startswith("[") and line.endswith("]"):
+                in_provider = (line == "[provider]")
+                continue
+            if not in_provider:
+                continue
+            m = re.match(r'^\s*wallet\s*=\s*"([^"]+)"\s*(?:#.*)?$', raw)
+            if not m:
+                continue
+            wallet_path = m.group(1)
+            # Skip ~/-rooted absolute paths (those resolve outside the repo)
+            if wallet_path.startswith(("~", "/Users/", "/home/", "C:\\", "C:/")):
+                continue
+            # Resolve relative to the toml's directory
+            candidate = (toml.parent / wallet_path).resolve()
+            try:
+                candidate.relative_to(repo_root.resolve())
+            except ValueError:
+                continue
+            if candidate.is_file():
+                yield (
+                    toml,
+                    ln,
+                    f"Anchor.toml [provider].wallet -> {wallet_path} which is committed at {candidate.relative_to(repo_root.resolve())}.",
+                )
+
+
+ANCHOR_WALLET_LEAK = Rule(
+    id="ANCHOR_WALLET_LEAK",
+    severity="critical",
+    description=(
+        "`Anchor.toml [provider].wallet` points to a keypair file that is "
+        "present inside the repo. The Anchor framework reads this on every "
+        "`anchor build/test/deploy`, so the keypair is treated as live "
+        "credentials. Move the keypair outside the repo (e.g. "
+        "`~/.config/solana/id.json`) and update Anchor.toml accordingly."
+    ),
+    regex=None,
+    scope="tree",
+    tree_scan=_scan_anchor_wallet_leak,
+)
+
+
 ALL_RULES: list[Rule] = [
     PLAINTEXT_KEY,
     SEED_IN_COMMENT,
@@ -545,6 +644,8 @@ ALL_RULES: list[Rule] = [
     NONCE_ADVANCE_IN_MULTISIG,
     LOW_LIQUIDITY_ORACLE_WHITELIST,
     UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE,
+    MNEMONIC_IN_STRING,
+    ANCHOR_WALLET_LEAK,
 ]
 
 

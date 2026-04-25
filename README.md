@@ -80,6 +80,8 @@ Use them in later steps:
 | `ENV_LEAK`                          | high     | `.env` file present in the tree but not covered by any `.gitignore`|
 | `LOW_LIQUIDITY_ORACLE_WHITELIST`    | high     | Oracle allow-list add with no preceding liquidity / depth check    |
 | `UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE`| high     | One tx bundles 2+ admin instructions (SetAuthority / UpgradeProgram) |
+| `MNEMONIC_IN_STRING`                | critical | 12/24-word BIP39 phrase as a string literal assigned to `mnemonic` / `seed` / `wallet*phrase` (added v1.2.0) |
+| `ANCHOR_WALLET_LEAK`                | critical | `Anchor.toml [provider].wallet` resolves to a keypair file inside the repo (added v1.2.0) |
 | `HARDCODED_RPC`                     | medium   | Mainnet RPC URL with an embedded `api-key=` / `token=` query param |
 
 The three `NONCE_ADVANCE_IN_MULTISIG` / `LOW_LIQUIDITY_ORACLE_WHITELIST` /
@@ -87,6 +89,13 @@ The three `NONCE_ADVANCE_IN_MULTISIG` / `LOW_LIQUIDITY_ORACLE_WHITELIST` /
 the April 2026 Drift hack ($285M, DPRK-linked). See [the post-mortem
 article](https://dev.to/cryptomotifs) for the full attack chain and how
 each rule maps back to it.
+
+`MNEMONIC_IN_STRING` and `ANCHOR_WALLET_LEAK` were added in **v1.2.0** to
+cover two compromise vectors that the v1.0/1.1 rules were silent on:
+seed phrases assigned as ordinary string literals (not just inside
+comments), and the canonical Anchor framework misconfiguration where
+`Anchor.toml`'s provider wallet path resolves to a keypair committed
+inside the repo.
 
 All matches are surfaced as **inline GitHub annotations** so they appear
 right on the PR diff — no need to dig through logs.

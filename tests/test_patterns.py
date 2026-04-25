@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from src.patterns import (
     ALL_RULES,
+    ANCHOR_WALLET_LEAK,
     HARDCODED_RPC,
     JSON_KEYPAIR,
     LOW_LIQUIDITY_ORACLE_WHITELIST,
+    MNEMONIC_IN_STRING,
     NONCE_ADVANCE_IN_MULTISIG,
     PLAINTEXT_KEY,
     SEED_IN_COMMENT,
@@ -143,3 +145,117 @@ class TestDriftRulesRegistered:
         assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE.scope == "tree"
         assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE.severity == "high"
         assert UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE.tree_scan is not None
+
+
+# ---------------------------------------------------------------------------
+# v1.2.0 — MNEMONIC_IN_STRING and ANCHOR_WALLET_LEAK
+# ---------------------------------------------------------------------------
+
+
+class TestMnemonicInString:
+    def test_matches_12_word_string_double_quoted(self) -> None:
+        line = (
+            'const mnemonic = "abandon ability able about above absent absorb '
+            'abstract absurd abuse access accident";'
+        )
+        assert MNEMONIC_IN_STRING.regex.search(line) is not None
+
+    def test_matches_12_word_string_single_quoted(self) -> None:
+        line = (
+            "SEED_PHRASE='canyon vacant velvet venture verb very vessel veteran "
+            "viable vibrant vicious victory'"
+        )
+        assert MNEMONIC_IN_STRING.regex.search(line) is not None
+
+    def test_matches_24_words_typescript_assignment(self) -> None:
+        words = " ".join(["abandon"] * 24)
+        line = f"const seed = `{words}`;"
+        assert MNEMONIC_IN_STRING.regex.search(line) is not None
+
+    def test_skips_when_context_word_is_unrelated(self) -> None:
+        # No mnemonic / seed / wallet context near the literal — no match.
+        words = " ".join(["abandon"] * 12)
+        line = f'const message = "{words}";'
+        assert MNEMONIC_IN_STRING.regex.search(line) is None
+
+    def test_skips_too_few_words(self) -> None:
+        words = " ".join(["abandon"] * 11)
+        line = f'const mnemonic = "{words}";'
+        assert MNEMONIC_IN_STRING.regex.search(line) is None
+
+    def test_skips_too_many_words(self) -> None:
+        # 25 words inside the quotes — the regex requires the body to be
+        # 12..24 words and immediately close with the matching quote, so a
+        # 25-word string is NOT matched.  This is the strict-match property
+        # that keeps false positives low on long natural-language strings.
+        words = " ".join(["abandon"] * 25)
+        line = f'const mnemonic = "{words}";'
+        assert MNEMONIC_IN_STRING.regex.search(line) is None
+
+    def test_severity_and_registration(self) -> None:
+        assert MNEMONIC_IN_STRING in ALL_RULES
+        assert MNEMONIC_IN_STRING.severity == "critical"
+        assert MNEMONIC_IN_STRING.scope == "content"
+
+
+class TestAnchorWalletLeak:
+    """Exercise the tree-scan against a synthetic mini-repo on tmp_path."""
+
+    def _write_anchor_repo(self, tmp_path, wallet_path: str, wallet_present: bool):
+        anchor = tmp_path / "Anchor.toml"
+        anchor.write_text(
+            "[provider]\n"
+            f'wallet = "{wallet_path}"\n'
+            'cluster = "Localnet"\n',
+            encoding="utf-8",
+        )
+        if wallet_present:
+            target = (tmp_path / wallet_path).resolve()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Synthetic 64-int array (matches the real Solana CLI keypair shape)
+            target.write_text("[" + ",".join(["12"] * 64) + "]", encoding="utf-8")
+        return anchor
+
+    def test_flags_when_wallet_path_resolves_inside_repo(self, tmp_path) -> None:
+        self._write_anchor_repo(tmp_path, "./id.json", wallet_present=True)
+        results = list(ANCHOR_WALLET_LEAK.tree_scan(tmp_path))
+        assert len(results) == 1
+        path, line, msg = results[0]
+        assert path.name == "Anchor.toml"
+        assert line == 2
+        assert "id.json" in msg
+
+    def test_skips_when_wallet_outside_repo(self, tmp_path) -> None:
+        # Path leaving the repo via .. — resolved would land outside tmp_path.
+        self._write_anchor_repo(tmp_path, "../outside_keypair.json", wallet_present=False)
+        results = list(ANCHOR_WALLET_LEAK.tree_scan(tmp_path))
+        assert results == []
+
+    def test_skips_home_dir_path(self, tmp_path) -> None:
+        self._write_anchor_repo(tmp_path, "~/.config/solana/id.json", wallet_present=False)
+        results = list(ANCHOR_WALLET_LEAK.tree_scan(tmp_path))
+        assert results == []
+
+    def test_skips_when_file_missing(self, tmp_path) -> None:
+        self._write_anchor_repo(tmp_path, "./id.json", wallet_present=False)
+        results = list(ANCHOR_WALLET_LEAK.tree_scan(tmp_path))
+        assert results == []
+
+    def test_skips_when_wallet_in_other_table(self, tmp_path) -> None:
+        # `wallet = ...` under [scripts] not [provider] is irrelevant.
+        anchor = tmp_path / "Anchor.toml"
+        anchor.write_text(
+            "[scripts]\n"
+            'wallet = "./id.json"\n',
+            encoding="utf-8",
+        )
+        # Create the file too — should still NOT flag.
+        (tmp_path / "id.json").write_text("[" + ",".join(["1"] * 64) + "]")
+        results = list(ANCHOR_WALLET_LEAK.tree_scan(tmp_path))
+        assert results == []
+
+    def test_severity_and_registration(self) -> None:
+        assert ANCHOR_WALLET_LEAK in ALL_RULES
+        assert ANCHOR_WALLET_LEAK.severity == "critical"
+        assert ANCHOR_WALLET_LEAK.scope == "tree"
+        assert ANCHOR_WALLET_LEAK.tree_scan is not None
