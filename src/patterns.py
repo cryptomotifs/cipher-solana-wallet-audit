@@ -634,6 +634,51 @@ ANCHOR_WALLET_LEAK = Rule(
 )
 
 
+# ---------------------------------------------------------------------------
+# v1.3.0 additions (2026-04-25 evening): hex-encoded private key literals.
+# Ethereum-style EOA keys are 32 bytes (64 hex) and Solana secret-key bytes
+# can be exported as 64 bytes (128 hex). Both get committed to repos by
+# devs who think `0x...` strings are opaque.  Strict-match: the literal
+# must be assigned to a wallet/key/secret/signer/private-named identifier
+# to keep noise on log dumps and SHA-256 hashes (also 64 hex) tame.
+# ---------------------------------------------------------------------------
+
+# Rule 12: HEX_PRIVATE_KEY — 64- or 128-char hex string literal assigned to
+# a wallet/key/secret identifier.  Catches:
+#     const PRIVATE_KEY = "0x1234abcd...";        // 64 hex (EVM)
+#     priv = '1234abcd...0xed25519...';            // 128 hex (Solana secret)
+#     SIGNER_KEY=ABCDEF...0123                     // .env line, 64 or 128 hex
+#     wallet_secret = b"\\x12\\x34..."             // not covered (binary form)
+HEX_PRIVATE_KEY_REGEX = re.compile(
+    r"""(?ix)
+    (?:
+        private[_\-]?key | secret[_\-]?key | priv[_\-]?key |
+        wallet[_\-]?secret | signer[_\-]?key | keypair[_\-]?bytes
+    )
+    \s*[:=]\s*                          # = or : assignment
+    ['"]?                                # optional opening quote
+    (?:0x)?                              # optional 0x prefix
+    [0-9a-fA-F]{64}                      # 64 hex chars (EVM-size key)
+    (?:[0-9a-fA-F]{64})?                 # optional extra 64 (Solana 128-hex)
+    ['"]?                                # optional closing quote
+    """
+)
+
+HEX_PRIVATE_KEY = Rule(
+    id="HEX_PRIVATE_KEY",
+    severity="critical",
+    description=(
+        "A 64- or 128-character hex literal is assigned to an identifier "
+        "named like a private key (private_key / secret_key / wallet_secret / "
+        "signer_key / keypair_bytes). 64 hex = 32 bytes = an EVM EOA key. "
+        "128 hex = 64 bytes = a Solana secret-key blob. Either way: rotate "
+        "immediately and remove from git history."
+    ),
+    regex=HEX_PRIVATE_KEY_REGEX,
+    scope="content",
+)
+
+
 ALL_RULES: list[Rule] = [
     PLAINTEXT_KEY,
     SEED_IN_COMMENT,
@@ -646,6 +691,7 @@ ALL_RULES: list[Rule] = [
     UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE,
     MNEMONIC_IN_STRING,
     ANCHOR_WALLET_LEAK,
+    HEX_PRIVATE_KEY,
 ]
 
 

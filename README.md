@@ -82,6 +82,7 @@ Use them in later steps:
 | `UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE`| high     | One tx bundles 2+ admin instructions (SetAuthority / UpgradeProgram) |
 | `MNEMONIC_IN_STRING`                | critical | 12/24-word BIP39 phrase as a string literal assigned to `mnemonic` / `seed` / `wallet*phrase` (added v1.2.0) |
 | `ANCHOR_WALLET_LEAK`                | critical | `Anchor.toml [provider].wallet` resolves to a keypair file inside the repo (added v1.2.0) |
+| `HEX_PRIVATE_KEY`                   | critical | 64- or 128-char hex literal assigned to a `private_key` / `secret_key` / `wallet_secret` / `signer_key` / `keypair_bytes` identifier (added v1.3.0) |
 | `HARDCODED_RPC`                     | medium   | Mainnet RPC URL with an embedded `api-key=` / `token=` query param |
 
 The three `NONCE_ADVANCE_IN_MULTISIG` / `LOW_LIQUIDITY_ORACLE_WHITELIST` /
@@ -96,6 +97,12 @@ seed phrases assigned as ordinary string literals (not just inside
 comments), and the canonical Anchor framework misconfiguration where
 `Anchor.toml`'s provider wallet path resolves to a keypair committed
 inside the repo.
+
+`HEX_PRIVATE_KEY` was added in **v1.3.0** to catch the Ethereum-style
+`const PRIVATE_KEY = "0x…64-hex…"` and Solana 128-hex secret-key blob
+shapes that `PLAINTEXT_KEY` (which targets base58) misses. Strict
+identifier-context match keeps it silent on transaction hashes and SHA-256
+digests.
 
 All matches are surfaced as **inline GitHub annotations** so they appear
 right on the PR diff — no need to dig through logs.

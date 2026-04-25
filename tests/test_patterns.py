@@ -6,6 +6,7 @@ from src.patterns import (
     ALL_RULES,
     ANCHOR_WALLET_LEAK,
     HARDCODED_RPC,
+    HEX_PRIVATE_KEY,
     JSON_KEYPAIR,
     LOW_LIQUIDITY_ORACLE_WHITELIST,
     MNEMONIC_IN_STRING,
@@ -259,3 +260,53 @@ class TestAnchorWalletLeak:
         assert ANCHOR_WALLET_LEAK.severity == "critical"
         assert ANCHOR_WALLET_LEAK.scope == "tree"
         assert ANCHOR_WALLET_LEAK.tree_scan is not None
+
+
+# ---------------------------------------------------------------------------
+# v1.3.0 — HEX_PRIVATE_KEY
+# ---------------------------------------------------------------------------
+
+
+class TestHexPrivateKey:
+    def test_matches_64_hex_evm_key(self) -> None:
+        # 32-byte (EVM EOA) key as 64 hex chars
+        line = (
+            'const PRIVATE_KEY = "0x' + "ab" * 32 + '";'
+        )
+        assert HEX_PRIVATE_KEY.regex.search(line) is not None
+
+    def test_matches_128_hex_solana_secret(self) -> None:
+        # 64-byte Solana secret key as 128 hex
+        line = (
+            'wallet_secret: "' + "12" * 64 + '"'
+        )
+        assert HEX_PRIVATE_KEY.regex.search(line) is not None
+
+    def test_matches_no_quotes_env_style(self) -> None:
+        # .env-style line, no quotes, no 0x prefix
+        line = "SIGNER_KEY=" + "cd" * 32
+        assert HEX_PRIVATE_KEY.regex.search(line) is not None
+
+    def test_matches_underscore_variant(self) -> None:
+        line = 'priv_key = "0x' + "ef" * 32 + '"'
+        assert HEX_PRIVATE_KEY.regex.search(line) is not None
+
+    def test_skips_when_unrelated_identifier(self) -> None:
+        # 64 hex chars near an unrelated identifier (e.g. transaction hash) — no match.
+        line = 'tx_hash = "0x' + "ab" * 32 + '"'
+        assert HEX_PRIVATE_KEY.regex.search(line) is None
+
+    def test_skips_short_hex(self) -> None:
+        # 63 chars is too short — would fail the {64} quantifier.
+        line = 'PRIVATE_KEY = "0x' + "a" * 63 + '"'
+        assert HEX_PRIVATE_KEY.regex.search(line) is None
+
+    def test_skips_non_hex_chars(self) -> None:
+        # 'g' is not hex — pattern rejects.
+        line = 'PRIVATE_KEY = "0x' + "g" * 64 + '"'
+        assert HEX_PRIVATE_KEY.regex.search(line) is None
+
+    def test_severity_and_registration(self) -> None:
+        assert HEX_PRIVATE_KEY in ALL_RULES
+        assert HEX_PRIVATE_KEY.severity == "critical"
+        assert HEX_PRIVATE_KEY.scope == "content"
