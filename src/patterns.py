@@ -679,6 +679,117 @@ HEX_PRIVATE_KEY = Rule(
 )
 
 
+# ---------------------------------------------------------------------------
+# v1.4.0 (2026-04-25) — Token2022 transfer-hook abuse detector.
+#
+# Token2022 transfer hooks (SPL spec, mainstream on Solana in 2026) let a
+# mint specify a program that runs on every transfer. Two abuse patterns
+# show up routinely in fresh memecoin / yield-bearing tokens:
+#   a) the hook redirects a percentage of every transfer to a hard-coded
+#      "fee_collector" / "treasury" / "dev_wallet" account — this is fine
+#      when disclosed but a major UX trap when undocumented;
+#   b) the hook takes a hard veto on transfers (`return Err(...)`) outside
+#      a whitelist — a soft soulbound that traps holders who didn't read.
+#
+# We grep the Rust hook program source for the canonical Anchor handler
+# names + suspicious account names so the warden can flag the mint
+# documentation gap before it lands on a public DEX.
+# ---------------------------------------------------------------------------
+
+# Rust file extensions that hold transfer-hook program source.
+_T22_HOOK_EXTS = {".rs"}
+_T22_HOOK_MAX_BYTES = 1_000_000  # 1 MB
+
+# Function names that the SPL Token2022 transfer-hook interface defines.
+_T22_HOOK_HANDLERS = (
+    "execute",                       # Anchor handler name (instruction discriminator "Execute")
+    "process_transfer_hook",         # native interface
+    "transfer_hook",                 # alt name
+    "TransferHookInstruction",       # discriminator enum
+)
+
+# Account / variable names that suggest a fee redirect / treasury skim.
+_T22_FEE_REDIRECT_TOKENS = (
+    "fee_collector",
+    "treasury_account",
+    "treasury_wallet",
+    "dev_wallet",
+    "dev_account",
+    "marketing_wallet",
+    "team_wallet",
+)
+
+# Patterns that signal a soulbound / whitelist veto.
+_T22_VETO_TOKENS = (
+    "TransferDisallowed",
+    "transfer_disallowed",
+    "TransfersPaused",
+    "transfers_paused",
+    "NotInWhitelist",
+    "not_in_whitelist",
+    "SoulboundError",
+)
+
+
+def _scan_t22_transfer_hook_abuse(repo_root: Path) -> Iterable[tuple[Path, int, str]]:
+    """For every Rust file that looks like a Token2022 transfer-hook program,
+    surface fee-redirect or veto-by-default patterns that mint owners often
+    forget to disclose."""
+    for p in repo_root.rglob("*.rs"):
+        try:
+            if p.stat().st_size > _T22_HOOK_MAX_BYTES:
+                continue
+        except OSError:
+            continue
+        if any(part in {"target", "node_modules", ".git"} for part in p.parts):
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        # Cheap pre-filter: only fire if the file contains a transfer-hook handler.
+        if not any(handler in text for handler in _T22_HOOK_HANDLERS):
+            continue
+        for ln_no, line in enumerate(text.splitlines(), 1):
+            # Pattern A: fee redirect
+            for tok in _T22_FEE_REDIRECT_TOKENS:
+                if tok in line:
+                    yield (
+                        p,
+                        ln_no,
+                        f"Token2022 transfer-hook references '{tok}' — verify the mint discloses the per-transfer fee redirect.",
+                    )
+                    break
+            # Pattern B: veto by default
+            else:
+                for tok in _T22_VETO_TOKENS:
+                    if tok in line:
+                        yield (
+                            p,
+                            ln_no,
+                            f"Token2022 transfer-hook references '{tok}' — verify the mint discloses the soulbound / whitelist behaviour.",
+                        )
+                        break
+
+
+T22_TRANSFER_HOOK_ABUSE = Rule(
+    id="T22_TRANSFER_HOOK_ABUSE",
+    severity="medium",
+    description=(
+        "Token2022 transfer-hook program source contains a fee-redirect "
+        "or veto-by-default pattern (treasury / dev_wallet skim, "
+        "TransferDisallowed / NotInWhitelist veto). Both are valid hook "
+        "implementations but are routinely undocumented at the mint "
+        "metadata level, trapping holders who didn't read the source. "
+        "Confirm the behaviour is in the mint's public docs before "
+        "shipping the token."
+    ),
+    regex=None,
+    scope="tree",
+    tree_scan=_scan_t22_transfer_hook_abuse,
+)
+
+
 ALL_RULES: list[Rule] = [
     PLAINTEXT_KEY,
     SEED_IN_COMMENT,
@@ -692,6 +803,7 @@ ALL_RULES: list[Rule] = [
     MNEMONIC_IN_STRING,
     ANCHOR_WALLET_LEAK,
     HEX_PRIVATE_KEY,
+    T22_TRANSFER_HOOK_ABUSE,
 ]
 
 

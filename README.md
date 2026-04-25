@@ -83,6 +83,7 @@ Use them in later steps:
 | `MNEMONIC_IN_STRING`                | critical | 12/24-word BIP39 phrase as a string literal assigned to `mnemonic` / `seed` / `wallet*phrase` (added v1.2.0) |
 | `ANCHOR_WALLET_LEAK`                | critical | `Anchor.toml [provider].wallet` resolves to a keypair file inside the repo (added v1.2.0) |
 | `HEX_PRIVATE_KEY`                   | critical | 64- or 128-char hex literal assigned to a `private_key` / `secret_key` / `wallet_secret` / `signer_key` / `keypair_bytes` identifier (added v1.3.0) |
+| `T22_TRANSFER_HOOK_ABUSE`           | medium   | Token2022 transfer-hook program with fee-redirect (`fee_collector` / `treasury_wallet` / `dev_wallet`) or soulbound-veto (`NotInWhitelist` / `TransferDisallowed`) patterns (added v1.4.0) |
 | `HARDCODED_RPC`                     | medium   | Mainnet RPC URL with an embedded `api-key=` / `token=` query param |
 
 The three `NONCE_ADVANCE_IN_MULTISIG` / `LOW_LIQUIDITY_ORACLE_WHITELIST` /
@@ -103,6 +104,16 @@ inside the repo.
 shapes that `PLAINTEXT_KEY` (which targets base58) misses. Strict
 identifier-context match keeps it silent on transaction hashes and SHA-256
 digests.
+
+`T22_TRANSFER_HOOK_ABUSE` was added in **v1.4.0** for the Token2022
+transfer-hook surface area that became mainstream on Solana through
+2026. The rule scans Rust sources that implement the SPL transfer-hook
+handler (`execute` / `process_transfer_hook` / `transfer_hook`) and flags
+two undisclosed-by-default patterns: per-transfer fee redirects to
+`fee_collector` / `treasury_wallet` / `dev_wallet`-style accounts, and
+soulbound-style vetoes via `NotInWhitelist` / `TransferDisallowed`.
+Both are valid hook implementations but routinely undocumented at the
+mint metadata level.
 
 All matches are surfaced as **inline GitHub annotations** so they appear
 right on the PR diff — no need to dig through logs.

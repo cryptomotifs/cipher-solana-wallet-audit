@@ -14,6 +14,7 @@ from src.patterns import (
     PLAINTEXT_KEY,
     SEED_IN_COMMENT,
     SOLANA_CONFIG_KEYPAIR,
+    T22_TRANSFER_HOOK_ABUSE,
     UNBOUNDED_ADMIN_INSTRUCTION_BUNDLE,
     bip39_word_ratio,
 )
@@ -310,3 +311,95 @@ class TestHexPrivateKey:
         assert HEX_PRIVATE_KEY in ALL_RULES
         assert HEX_PRIVATE_KEY.severity == "critical"
         assert HEX_PRIVATE_KEY.scope == "content"
+
+
+# ---------------------------------------------------------------------------
+# v1.4.0 — T22_TRANSFER_HOOK_ABUSE (Token2022, March-April 2026 SOTA)
+# ---------------------------------------------------------------------------
+
+
+class TestT22TransferHookAbuse:
+    """Exercise the tree-scan against synthetic Rust hook program sources."""
+
+    def _write_hook(self, tmp_path, body: str) -> Path:
+        f = tmp_path / "transfer_hook" / "src" / "lib.rs"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(body, encoding="utf-8")
+        return f
+
+    def test_flags_fee_redirect(self, tmp_path) -> None:
+        body = '''
+            use anchor_lang::prelude::*;
+            #[program]
+            pub mod hook_program {
+                use super::*;
+                pub fn execute(ctx: Context<Execute>, amount: u64) -> Result<()> {
+                    let fee = amount / 100;
+                    transfer(&ctx.accounts.fee_collector, fee)?;
+                    Ok(())
+                }
+            }
+        '''
+        f = self._write_hook(tmp_path, body)
+        results = list(T22_TRANSFER_HOOK_ABUSE.tree_scan(tmp_path))
+        # one match for fee_collector
+        assert any("fee_collector" in r[2] for r in results)
+        assert any(r[0] == f for r in results)
+
+    def test_flags_treasury_redirect(self, tmp_path) -> None:
+        body = '''
+            pub fn process_transfer_hook(ctx: Context<X>, amt: u64) -> Result<()> {
+                ctx.accounts.treasury_wallet.lamports.borrow_mut().checked_add(amt / 50)?;
+                Ok(())
+            }
+        '''
+        self._write_hook(tmp_path, body)
+        results = list(T22_TRANSFER_HOOK_ABUSE.tree_scan(tmp_path))
+        assert any("treasury_wallet" in r[2] for r in results)
+
+    def test_flags_soulbound_veto(self, tmp_path) -> None:
+        body = '''
+            pub fn execute(ctx: Context<E>, _amt: u64) -> Result<()> {
+                if !ctx.accounts.whitelist.contains(&ctx.accounts.dest.key()) {
+                    return Err(error!(NotInWhitelist));
+                }
+                Ok(())
+            }
+        '''
+        self._write_hook(tmp_path, body)
+        results = list(T22_TRANSFER_HOOK_ABUSE.tree_scan(tmp_path))
+        assert any("NotInWhitelist" in r[2] for r in results)
+
+    def test_skips_when_no_hook_handler(self, tmp_path) -> None:
+        # A Rust file that mentions fee_collector but is NOT a transfer hook.
+        body = '''
+            pub fn pay_referral(ctx: Context<Ref>) -> Result<()> {
+                transfer(&ctx.accounts.fee_collector, 100)?;
+                Ok(())
+            }
+        '''
+        self._write_hook(tmp_path, body)
+        results = list(T22_TRANSFER_HOOK_ABUSE.tree_scan(tmp_path))
+        # Pre-filter: no `execute` / `process_transfer_hook` / `transfer_hook`
+        # / `TransferHookInstruction` token, so the rule shouldn't fire.
+        assert results == []
+
+    def test_skips_target_dir(self, tmp_path) -> None:
+        body = '''
+            pub fn execute(ctx: Context<E>) -> Result<()> {
+                ctx.accounts.fee_collector.do_thing();
+                Ok(())
+            }
+        '''
+        # Place the file inside a target/ build artifact directory.
+        f = tmp_path / "target" / "debug" / "build" / "x.rs"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(body, encoding="utf-8")
+        results = list(T22_TRANSFER_HOOK_ABUSE.tree_scan(tmp_path))
+        assert results == []
+
+    def test_severity_and_registration(self) -> None:
+        assert T22_TRANSFER_HOOK_ABUSE in ALL_RULES
+        assert T22_TRANSFER_HOOK_ABUSE.severity == "medium"
+        assert T22_TRANSFER_HOOK_ABUSE.scope == "tree"
+        assert T22_TRANSFER_HOOK_ABUSE.tree_scan is not None
